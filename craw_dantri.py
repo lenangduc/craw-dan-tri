@@ -1,5 +1,7 @@
 import urllib.request
 import re
+import json
+from flask import Flask, request, jsonify
 
 def readContentUrl(url):
     userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36'
@@ -9,10 +11,10 @@ def readContentUrl(url):
     with urllib.request.urlopen(req) as response:
         thePage = response.read()
     return thePage.decode("utf-8")
-url = "https://dantri.com.vn/xa-hoi/bo-tu-phap-noi-ve-vu-nhan-boi-thuong-oan-sai-23-ty-dong-phai-chi-900-trieu-20210402200352849.htm"
+
 
 def regexSearchGroup(regex, data):
-    matches = re.finditer(regex, data, re.MULTILINE)
+    matches = re.finditer(regex, data, re.DOTALL)
  
     listData = []
     for matchNum, match in enumerate(matches, start=1):
@@ -33,30 +35,69 @@ def regexSearch(regex, data):
         result = None
     return result
 
-strData = readContentUrl(url)
-
 post = {}
 
-regexCatalogys = r"dt-breadcrumb\">(.*?)\/ul>"
-catalogys = regexSearch(regexCatalogys, strData)
-regexCatalogy = r"title=\"(.*?)\""
-post['catalogy'] = regexSearchGroup(regexCatalogy, catalogys)[1]
+def crawDanTri(url):
 
-regexTime = r"dt-news__time\">(.*?)<\/span>"
-post['time'] = regexSearch(regexTime, strData)
+    strData = readContentUrl(url)
 
-regexTitle = r"dt-news__title\">(.*?)<\/h1"
-post['title'] = regexSearch(regexTitle, strData)
+    regexCatalogys = r"dt-breadcrumb\">(.*?)\/ul>"
+    catalogys = regexSearch(regexCatalogys, strData)
+    regexCatalogy = r"title=\"(.*?)\""
+    post['catalogy'] = regexSearchGroup(regexCatalogy, catalogys)[1]
 
-regexSampo = r"Dân trí</span><h2>(.*?)<\/h2"
-post['sampo'] = regexSearch(regexSampo, strData)
+    regexTime = r"dt-news__time\">(.*?)<\/span>"
+    post['time'] = regexSearch(regexTime, strData)
 
-regexAuthor = r"strong>(.*?)<\/strong>"
-post['author'] = regexSearchGroup(regexAuthor, strData)[0]
+    regexTitle = r"dt-news__title\">(.*?)<\/h1"
+    post['title'] = regexSearch(regexTitle, strData)
 
-regexStrKeyWord = r"dt-news__tag-list\">(.*?)<\/ul>"
-strKeyWord = regexSearch(regexStrKeyWord, strData)
-regexKeyWord = r"title=\"(.*?)\" href"
-post['keyword'] =  regexSearchGroup(regexKeyWord, strKeyWord)
+    regexSapo = r"Dân trí</span><h2>(.*?)<\/h2"
+    post['sapo'] = regexSearch(regexSapo, strData)
 
-print(post['keyword'])
+    regexStrKeyWord = r"dt-news__tag-list\">(.*?)<\/ul>"
+    strKeyWord = regexSearch(regexStrKeyWord, strData)
+    regexKeyWord = r"title=\"(.*?)\" href"
+    post['keyword'] =  regexSearchGroup(regexKeyWord, strKeyWord)
+
+    regexContentAndAuthor = r"dt-news__content(.*?)<\/div>"
+    contentAndAuthor = regexSearch(regexContentAndAuthor, strData)
+
+    regexAuthor = r"strong>(.*?)<\/strong>"
+    post['author'] = regexSearch(regexAuthor, contentAndAuthor)
+
+    strContents = re.sub(r"figcaption>\n(.*?)\n<\/figcaption", "123456", contentAndAuthor)
+    strContents = re.sub(r"<a.*?>", "", strContents)
+    strContents = re.sub(r"<\/a>", "", strContents)
+    strContents = re.sub(r"&nbsp;", "", strContents)
+    strContents = re.sub(r"<\/em>", " ", strContents)
+    strContents = re.sub(r"<em>", " ", strContents)
+
+    regexContent = r"<p>(.*?)<\/p>"
+    contents = regexSearchGroup(regexContent, strContents)
+
+    content = ''
+    for sub in contents:
+        content += sub + "\n"
+
+    post['content'] = content
+    return post
+
+
+url = "https://dantri.com.vn/xa-hoi/bo-tu-phap-noi-ve-vu-nhan-boi-thuong-oan-sai-23-ty-dong-phai-chi-900-trieu-20210402200352849.htm"
+url1 = "https://dantri.com.vn/phap-luat/tra-ho-so-de-dieu-tra-bo-sung-vu-an-lien-quan-den-cuu-pho-chu-tich-tphcm-20210402211930747.htm"
+
+app = Flask(__name__)
+
+@app.route('/', methods = ['GET'])
+def getListPostUser():
+   response = jsonify({
+      'result' : crawDanTri(url)
+   })
+   response.headers.add('Access-Control-Allow-Origin', '*')
+   return response
+
+if __name__ == "__main__":
+   app.run()
+ 
+ 
